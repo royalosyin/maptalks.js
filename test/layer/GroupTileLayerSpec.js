@@ -28,42 +28,42 @@ describe('GroupTileLayer', function () {
     });
 
     it('add to map', function (done) {
-        this.timeout(10000);
         var group = new maptalks.GroupTileLayer('group', [
             new maptalks.TileLayer('tile1', {
-                urlTemplate : '/resources/tile.png'
+                urlTemplate : '#'
             }),
             new maptalks.TileLayer('tile2', {
-                urlTemplate : '/resources/tile.png'
+                urlTemplate : '#'
             })
         ], {
             renderer : 'canvas'
         });
         var group2 = new maptalks.GroupTileLayer('group2', [
             new maptalks.TileLayer('tile1', {
-                urlTemplate : '/resources/tile.png'
+                urlTemplate : '#'
             })
         ], {
             renderer : 'canvas'
         });
-        group.once('layerload', function () {
+        setTimeout(function () {
             var grid = group.getTiles();
             var grid2 = group2.getTiles();
-            expect(grid.tiles.length).to.be.eql(2);
-            expect(grid2.tiles.length).to.be.eql(1);
+            expect(grid.count).to.be.eql(2);
+            expect(grid2.count).to.be.eql(1);
+            expect(grid.tileGrids[0].tiles.length).to.be.eql(1);
+            expect(grid2.tileGrids[0].tiles.length).to.be.eql(1);
             map.removeLayer(group);
             done();
-        });
+        }, 80);
         map.addLayer([group, group2]);
     });
 
     it('show and hide', function (done) {
-        this.timeout(10000);
         var tile1 = new maptalks.TileLayer('tile1', {
-            urlTemplate : '/resources/tile.png'
+            urlTemplate : TILE_IMAGE
         });
         var tile2 = new maptalks.TileLayer('tile2', {
-            urlTemplate : '/resources/tile.png'
+            urlTemplate : TILE_IMAGE
         });
         var group = new maptalks.GroupTileLayer('group', [
             tile1, tile2
@@ -89,10 +89,10 @@ describe('GroupTileLayer', function () {
 
     it('event bindings', function () {
         var tile1 = new maptalks.TileLayer('tile1', {
-            urlTemplate : '/resources/tile.png'
+            urlTemplate : '#'
         });
         var tile2 = new maptalks.TileLayer('tile2', {
-            urlTemplate : '/resources/tile.png'
+            urlTemplate : '#'
         });
         var group = new maptalks.GroupTileLayer('group', [
             tile1, tile2
@@ -111,13 +111,12 @@ describe('GroupTileLayer', function () {
     });
 
     it('json', function (done) {
-        this.timeout(10000);
         var group = new maptalks.GroupTileLayer('group', [
             new maptalks.TileLayer('tile1', {
-                urlTemplate : '/resources/tile.png'
+                urlTemplate : TILE_IMAGE
             }),
             new maptalks.TileLayer('tile2', {
-                urlTemplate : '/resources/tile.png'
+                urlTemplate : TILE_IMAGE
             })
         ], {
             renderer : 'canvas'
@@ -137,19 +136,18 @@ describe('GroupTileLayer', function () {
 
         layer.once('layerload', function () {
             var grid = layer.getTiles();
-
-            expect(grid.tiles.length).to.be.eql(2);
+            expect(grid.tileGrids[0].tiles.length).to.be.eql(1);
+            expect(grid.tileGrids[1].tiles.length).to.be.eql(1);
             done();
         });
         map.addLayer(layer);
     });
 
     it('zoom isVisible', function (done) {
-        this.timeout(10000);
         var group = new maptalks.GroupTileLayer('group', [
             new maptalks.TileLayer('tile1', {
                 maxZoom : 17,
-                urlTemplate : '/resources/tile.png'
+                urlTemplate : TILE_IMAGE
             })
         ], {
             renderer : 'canvas'
@@ -165,10 +163,25 @@ describe('GroupTileLayer', function () {
         map.addLayer(group);
     });
 
+    it('duplicate child layer id should throw exception', function () {
+        expect(function () {
+            var group = new maptalks.GroupTileLayer('group', [
+                new maptalks.TileLayer('tile1', {
+                    maxZoom : 17,
+                    urlTemplate : TILE_IMAGE
+                }),
+                new maptalks.TileLayer('tile1', {
+                    maxZoom : 17,
+                    urlTemplate : TILE_IMAGE
+                })
+            ]);
+        }).to.throwException();
+    });
+
     it('update child layer tile config if map\'s spatial reference changed', function () {
         var t1 = new maptalks.TileLayer('tile1', {
             maxZoom : 17,
-            urlTemplate : '/resources/tile.png'
+            urlTemplate : '#'
         });
         var group = new maptalks.GroupTileLayer('group', [
             t1
@@ -190,26 +203,25 @@ describe('GroupTileLayer', function () {
     });
 
     it('should load less tile placeholders than actual tiles', function (done) {
-        this.timeout(10000);
         var group = new maptalks.GroupTileLayer('group', [
             new maptalks.TileLayer('tile0', {
-                urlTemplate : '/resources/tile.png'
+                urlTemplate : TILE_IMAGE
             }),
             new maptalks.TileLayer('tile1', {
-                urlTemplate : '/resources/tile.png'
+                urlTemplate : TILE_IMAGE
             }),
             new maptalks.TileLayer('tile2', {
-                urlTemplate : '/resources/tile.png'
+                urlTemplate : TILE_IMAGE
             }),
             new maptalks.TileLayer('tile3', {
-                urlTemplate : '/resources/tile.png'
+                urlTemplate : TILE_IMAGE
             }),
         ], {
             placeholder : true,
             renderer : 'canvas'
         });
         map.addLayer(group);
-        var allTiles = group.getTiles().tiles;
+        var allTiles = group.getTiles().tileGrids[0].tiles;
         var renderer = group.getRenderer();
         renderer._drawTiles = function (tiles, parentTiles, childTiles, placeholders) {
             expect(placeholders.length > 0);

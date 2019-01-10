@@ -37,7 +37,7 @@ describe('Map.Spec', function () {
             expect(map.id !== 2).to.be.ok();
         });
 
-        it('getSize', function () {
+        it('#getSize', function () {
             var size = map.getSize();
 
             expect(size).to.have.property('width');
@@ -46,7 +46,7 @@ describe('Map.Spec', function () {
             expect(size.height).to.be.above(0);
         });
 
-        it('getExtent', function () {
+        it('#getExtent', function () {
             var extent = map.getExtent(),
                 projection = map.getProjection(),
                 res = map._getResolution(),
@@ -59,6 +59,22 @@ describe('Map.Spec', function () {
                 max = projection.project(extent.getMax());
             expect((max.x - min.x) / res).to.be.approx(size.width);
             expect((max.y - min.y) / res).to.be.approx(size.height);
+        });
+
+        it('#getSpatialReference', function () {
+            map.setSpatialReference({
+                projection : 'EPSG:3857'
+            });
+            var sp = map.getSpatialReference().toJSON();
+            expect(sp.fullExtent).to.be.eql({
+                'top': 6378137 * Math.PI,
+                'left': -6378137 * Math.PI,
+                'bottom': -6378137 * Math.PI,
+                'right': 6378137 * Math.PI
+            });
+            expect(sp.resolutions).to.be.eql(map._getResolutions());
+            expect(sp.projection).to.be.eql('EPSG:3857');
+            console.log(JSON.stringify(sp));
         });
 
         it('_get2DExtent', function () {
@@ -312,6 +328,13 @@ describe('Map.Spec', function () {
             var fitZoom = map.getFitZoom(new maptalks.Extent(extent.min + w / 4, extent.ymin + h / 4, extent.xmax - w / 4, extent.ymax - h / 4));
 
             expect(fitZoom).to.eql(zoom + 3);
+        });
+
+        it('fit to extent without animation', function () {
+            var extent = new maptalks.Marker(map.getCenter()).getExtent();
+            var maxZoom = map.getMaxZoom();
+            map.fitExtent(extent.toJSON(), 0, { 'animation' : false });
+            expect(maxZoom).to.be.eql(map.getZoom());
         });
 
         it('fit to extent', function (done) {
@@ -747,6 +770,26 @@ describe('Map.Spec', function () {
         });
     });
 
+    describe('geographic distance conversion', function () {
+        it('#distanceToPoint', function () {
+            var p = map.distanceToPoint(100, 200, map.getZoom() - 1);
+            expect(Math.round(p.x)).to.be(49);
+            expect(Math.round(p.y)).to.be(99);
+
+            var dist = map.pointToDistance(p.x, p.y, map.getZoom() - 1);
+            expect(Math.round(dist)).to.be(224);
+        });
+
+        it('#distanceToPixel', function () {
+            var size = map.distanceToPixel(100, 200);
+            expect(Math.round(size.width)).to.be(99);
+            expect(Math.round(size.height)).to.be(198);
+
+            var dist = map.pixelToDistance(size.width, size.height);
+            expect(Math.round(dist)).to.be(224);
+        });
+    });
+
     it('toDataURL', function () {
         var expected = 'data:image/png;base64';
         var data = map.toDataURL();
@@ -765,7 +808,7 @@ describe('Map.Spec', function () {
         var geometries = GEN_GEOMETRIES_OF_ALL_TYPES();
         layer.addGeometry(geometries, true);
         var tilelayer = new maptalks.TileLayer('t2', {
-            urlTemplate:'/resources/tile.png',
+            urlTemplate:'#',
             subdomains: [1, 2, 3],
             visible : false,
             renderer : 'canvas'

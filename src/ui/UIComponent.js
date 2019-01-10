@@ -27,20 +27,24 @@ import Geometry from '../geometry/Geometry';
  * @property {Boolean} [options.single=true]    - whether the UI is a global single one, only one UI will be shown at the same time if set to true.
  * @property {Boolean} [options.animation=null]         - fade | scale | fade,scale, add animation effect when showing and hiding.
  * @property {Number}  [options.animationDuration=300]  - animation duration, in milliseconds.
+ * @property {Boolean}  [options.pitchWithMap=false]    - whether tilt with map
+ * @property {Boolean}  [options.rotateWithMap=false]  - whether rotate with map
  * @memberOf ui.UIComponent
  * @instance
  */
 const options = {
-    'eventsPropagation' : false,
+    'eventsPropagation': false,
     'eventsToStop': null,
     'dx': 0,
     'dy': 0,
     'autoPan': false,
-    'autoPanDuration' : 600,
+    'autoPanDuration': 600,
     'single': true,
     'animation': 'scale',
     'animationOnHide': true,
-    'animationDuration': 500
+    'animationDuration': 500,
+    'pitchWithMap': false,
+    'rotateWithMap': false,
 };
 
 /**
@@ -193,9 +197,9 @@ class UIComponent extends Eventable(Class) {
             if (anim.scale) {
                 if (this.getTransformOrigin) {
                     const origin = this.getTransformOrigin();
-                    dom.style[TRANSFORMORIGIN] = origin.x + 'px ' + origin.y + 'px';
+                    dom.style[TRANSFORMORIGIN] = origin;
                 }
-                dom.style[TRANSFORM] = toCSSTranslate(this._pos) + ' scale(0)';
+                dom.style[TRANSFORM] = this._toCSSTranslate(this._pos) + ' scale(0)';
             }
         }
 
@@ -223,7 +227,7 @@ class UIComponent extends Eventable(Class) {
                 dom.style.opacity = 1;
             }
             if (anim.scale) {
-                dom.style[TRANSFORM] = toCSSTranslate(this._pos) + ' scale(1)';
+                dom.style[TRANSFORM] = this._toCSSTranslate(this._pos) + ' scale(1)';
             }
         }
 
@@ -248,6 +252,15 @@ class UIComponent extends Eventable(Class) {
         }
         if (!anim.ok) {
             dom.style.display = 'none';
+            /**
+           * hide event.
+           *
+           * @event ui.UIComponent#hide
+           * @type {Object}
+           * @property {String} type - hide
+           * @property {ui.UIComponent} target - UIComponent
+           */
+            this.fire('hide');
         } else {
             /* eslint-disable no-unused-expressions */
             dom.offsetHeight;
@@ -255,24 +268,15 @@ class UIComponent extends Eventable(Class) {
             dom.style[TRANSITION] = anim.transition;
             setTimeout(() => {
                 dom.style.display = 'none';
+                this.fire('hide');
             }, this.options['animationDuration']);
         }
         if (anim.fade) {
             dom.style.opacity = 0;
         }
         if (anim.scale) {
-            dom.style[TRANSFORM] = toCSSTranslate(this._pos) + ' scale(0)';
+            dom.style[TRANSFORM] = this._toCSSTranslate(this._pos) + ' scale(0)';
         }
-
-        /**
-         * hide event.
-         *
-         * @event ui.UIComponent#hide
-         * @type {Object}
-         * @property {String} type - hide
-         * @property {ui.UIComponent} target - UIComponent
-         */
-        this.fire('hide');
         return this;
     }
 
@@ -404,13 +408,13 @@ class UIComponent extends Eventable(Class) {
         } else if ((containerPoint.x + clientWidth - 35) > mapWidth) {
             left = (mapWidth - (containerPoint.x + clientWidth * 3 / 2));
         }
-        if (containerPoint.y < 0) {
-            top = -containerPoint.y + 50;
+        if (containerPoint.y - clientHeight < 0) {
+            top = -(containerPoint.y - clientHeight) + 50;
         } else if (containerPoint.y > mapHeight) {
             top = (mapHeight - containerPoint.y - clientHeight) - 30;
         }
         if (top !== 0 || left !== 0) {
-            map.panBy(new Point(left, top), { 'duration' : this.options['autoPanDuration'] });
+            map.panBy(new Point(left, top), { 'duration': this.options['autoPanDuration'] });
         }
     }
 
@@ -424,13 +428,14 @@ class UIComponent extends Eventable(Class) {
         const container = this._getUIContainer();
         dom.style.position = 'absolute';
         dom.style.left = -99999 + 'px';
-        dom.style.top = -99999 + 'px';
+        const anchor = dom.style.bottom ? 'bottom' : 'top';
+        dom.style[anchor] = -99999 + 'px';
         dom.style.display = '';
         container.appendChild(dom);
         this._size = new Size(dom.clientWidth, dom.clientHeight);
         dom.style.display = 'none';
         dom.style.left = '0px';
-        dom.style.top = '0px';
+        dom.style[anchor] = '0px';
         return this._size;
     }
 
@@ -519,7 +524,7 @@ class UIComponent extends Eventable(Class) {
     _getDefaultEvents() {
         return {
             'zooming rotate pitch': this.onEvent,
-            'zoomend' : this.onZoomEnd,
+            'zoomend': this.onZoomEnd,
             'moving': this.onMoving
         };
     }
@@ -567,25 +572,35 @@ class UIComponent extends Eventable(Class) {
     }
 
     _setPosition() {
-        const dom = this.getDOM(),
-            p = this.getPosition();
+        const dom = this.getDOM();
+        if (!dom) return;
+        const p = this.getPosition();
         this._pos = p;
-        dom.style[TRANSITION] = null;
-        dom.style[TRANSFORM] = toCSSTranslate(p) + ' scale(1)';
+        dom.style[TRANSFORM] = this._toCSSTranslate(p) + ' scale(1)';
+    }
+
+    _toCSSTranslate(p) {
+        if (!p) {
+            return '';
+        }
+        if (Browser.any3d) {
+            const map = this.getMap(),
+                bearing = map ? map.getBearing() : 0,
+                pitch = map ? map.getPitch() : 0;
+            let r = '';
+            if (this.options['pitchWithMap'] && pitch) {
+                r += ` rotateX(${Math.round(pitch)}deg)`;
+            }
+            if (this.options['rotateWithMap'] && bearing) {
+                r += ` rotateZ(${Math.round(-bearing)}deg)`;
+            }
+            return 'translate3d(' + p.x + 'px,' + p.y + 'px, 0px)' + r;
+        } else {
+            return 'translate(' + p.x + 'px,' + p.y + 'px)';
+        }
     }
 }
 
 UIComponent.mergeOptions(options);
-
-function toCSSTranslate(p) {
-    if (!p) {
-        return '';
-    }
-    if (Browser.any3d) {
-        return 'translate3d(' + p.x + 'px,' + p.y + 'px, 0px)';
-    } else {
-        return 'translate(' + p.x + 'px,' + p.y + 'px)';
-    }
-}
 
 export default UIComponent;

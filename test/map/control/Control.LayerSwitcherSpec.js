@@ -24,10 +24,10 @@ describe('Control.LayerSwitcher', function () {
 
     it('baseTitle and overlayTitle', function () {
         var tile1 = new maptalks.TileLayer('tile1', {
-            urlTemplate : '/resources/tile.png'
+            urlTemplate : '#'
         });
         var tile2 = new maptalks.TileLayer('tile2', {
-            urlTemplate : '/resources/tile.png'
+            urlTemplate : '#'
         });
         map.setBaseLayer(tile1);
         map.addLayer(tile2);
@@ -54,10 +54,10 @@ describe('Control.LayerSwitcher', function () {
         });
         map.addControl(control);
         var tile1 = new maptalks.TileLayer('tile1', {
-            urlTemplate : '/resources/tile.png'
+            urlTemplate : '#'
         });
         var tile2 = new maptalks.TileLayer('tile2', {
-            urlTemplate : '/resources/tile.png'
+            urlTemplate : '#'
         });
         map.addLayer([tile1, tile2]);
         happen.mouseover(control.button, {
@@ -73,12 +73,16 @@ describe('Control.LayerSwitcher', function () {
     it('base layers switch', function () {
         var control = new maptalks.control.LayerSwitcher();
         map.addControl(control);
+        var fired = false;
+        control.on('layerchange', function(e) {
+            fired = e.target;
+        });
         var group = new maptalks.GroupTileLayer('group', [
             new maptalks.TileLayer('tile1', {
-                urlTemplate : '/resources/tile.png'
+                urlTemplate : '#'
             }),
             new maptalks.TileLayer('tile2', {
-                urlTemplate : '/resources/tile.png',
+                urlTemplate : '#',
                 visible : false
             })
         ]);
@@ -97,13 +101,14 @@ describe('Control.LayerSwitcher', function () {
         expect(radios[1].checked).to.be.ok();
         expect(group.layers[0].isVisible()).not.to.be.ok();
         expect(group.layers[1].isVisible()).to.be.ok();
+        expect(fired).to.be.ok();
     });
 
     it('overlay layers switch', function () {
         var control = new maptalks.control.LayerSwitcher();
         map.addControl(control);
         var tile1 = new maptalks.TileLayer('tile1', {
-            urlTemplate : '/resources/tile.png'
+            urlTemplate : '#'
         });
         map.addLayer(tile1);
         happen.mouseover(control.button, {
@@ -125,7 +130,7 @@ describe('Control.LayerSwitcher', function () {
         var control = new maptalks.control.LayerSwitcher();
         map.addControl(control);
         var tile1 = new maptalks.TileLayer('tile1', {
-            urlTemplate : '/resources/tile.png'
+            urlTemplate : '#'
         });
         map.addLayer(tile1);
         happen.mouseover(control.button, {
@@ -147,7 +152,7 @@ describe('Control.LayerSwitcher', function () {
         var control = new maptalks.control.LayerSwitcher();
         map.addControl(control);
         var tile1 = new maptalks.TileLayer('tile1', {
-            urlTemplate : '/resources/tile.png'
+            urlTemplate : '#'
         });
         map.addLayer(tile1);
         happen.mouseover(control.button, {
@@ -162,12 +167,12 @@ describe('Control.LayerSwitcher', function () {
         map.addControl(control);
         var tile1 = new maptalks.TileLayer('tile1', {
             opacity : 0,
-            urlTemplate : '/resources/tile.png'
+            urlTemplate : '#'
         });
         var tile2 = new maptalks.TileLayer('tile2', {
             minZoom : 1,
             maxZoom : 1,
-            urlTemplate : '/resources/tile.png'
+            urlTemplate : '#'
         });
         map.addLayer(tile1, tile2);
         happen.mouseover(control.button, {

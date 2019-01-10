@@ -1,4 +1,4 @@
-import { now, sign } from '../../core/util';
+import { now } from '../../core/util';
 import { preventDefault, getEventContainerPoint } from '../../core/util/dom';
 import Handler from '../../handler/Handler';
 import DragHandler from '../../handler/Drag';
@@ -92,7 +92,6 @@ class MapDragHandler extends Handler {
         }
         delete this.startDragTime;
         delete this.startBearing;
-        delete this.db;//bearing distance
     }
 
     _start(param) {
@@ -133,7 +132,7 @@ class MapDragHandler extends Handler {
 
         this._clear();
 
-        if (!param.interupted && map._verifyExtent(map.getCenter()) && t < 280 && Math.abs(dy) + Math.abs(dx) > 5) {
+        if (map.options['panAnimation'] && !param.interupted && map._verifyExtent(map.getCenter()) && t < 280 && Math.abs(dy) + Math.abs(dx) > 5) {
             t = 5 * t * (Math.abs(dx) + Math.abs(dy)) / 500;
             map.panBy(new Point(dx, dy), { 'duration' : t });
         } else {
@@ -146,6 +145,7 @@ class MapDragHandler extends Handler {
         delete this._rotateMode;
         this.startBearing = this.target.getBearing();
         this.target.onDragRotateStart(param);
+        this._db = 0;
     }
 
     _rotating(param) {
@@ -174,18 +174,19 @@ class MapDragHandler extends Handler {
         }
 
         if (this._rotateMode.indexOf('rotate') >= 0 && map.options['dragRotate']) {
-            let bearing;
-            if (map.options['dragPitch'] || dx > dy) {
-                bearing = map.getBearing() - 0.6 * (this.preX - mx);
-            } else if (mx > map.width / 2) {
-                bearing = map.getBearing() + 0.6 * (this.preY - my);
-            } else {
-                bearing = map.getBearing() - 0.6 * (this.preY - my);
-            }
 
-            if (!this.db) {
-                this.db = sign(bearing - this.startBearing);
+            let db = 0;
+            if (map.options['dragPitch'] || dx > dy) {
+                db = -0.6 * (this.preX - mx);
+            } else if (mx > map.width / 2) {
+                db = 0.6 * (this.preY - my);
+            } else {
+                db = -0.6 * (this.preY - my);
             }
+            const bearing = map.getBearing() + db;
+            this._db = this._db || 0;
+            this._db += db;
+
             map.setBearing(bearing);
         }
         if (this._rotateMode.indexOf('pitch') >= 0 && map.options['dragPitch']) {
@@ -200,17 +201,17 @@ class MapDragHandler extends Handler {
 
     _rotateEnd(param) {
         const map = this.target;
+        const bearing = map.getBearing();
         this._clear();
-        let t = Date.now() - this.startDragTime;
+        const t = now() - this.startDragTime;
         map.onDragRotateEnd(param);
-        if (this._rotateMode === 'rotate' && !param.interupted && t < 280) {
+        if (Math.abs(bearing - this.startBearing) > 20 && (this._rotateMode === 'rotate' || this._rotateMode === 'rotate_pitch') && !param.interupted && t < 400) {
             const bearing = map.getBearing();
-            t = 2 * t * Math.abs(bearing) * 20 / 1000;
             map.animateTo({
-                'bearing' : bearing + this.db * 10
+                'bearing' : bearing + this._db / 2
             }, {
                 'easing'  : 'out',
-                'duration' : t
+                'duration' : 800
             });
         }
     }
@@ -227,7 +228,7 @@ class MapDragHandler extends Handler {
 Map.mergeOptions({
     'draggable': true,
     'dragPan' : true,
-    'dragRotatePitch' : false,
+    'dragRotatePitch' : true,
     'dragRotate' : true,
     'dragPitch' : true
 });

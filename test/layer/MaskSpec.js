@@ -74,7 +74,7 @@ describe('Spec of Masks', function () {
 
     //test tilelayer
     runTests(new maptalks.TileLayer('tile', {
-        urlTemplate:'/resources/tile.png',
+        urlTemplate : TILE_IMAGE,
         renderer:'canvas'
     }), context);
 
@@ -86,7 +86,7 @@ describe('Spec of Masks', function () {
         }
     }));
 
-    // runTests(vlayer, context);
+    runTests(vlayer, context);
 
     function runTests(layerToTest, context) {
         describe('layer', function () {
@@ -106,29 +106,27 @@ describe('Spec of Masks', function () {
             });
 
             it('can remove mask,' + layerToTest.getJSONType(), function (done) {
-                layerToTest.once('layerload', function () {
-                    layerToTest.once('layerload', function () {
-                        layerToTest.once('layerload', function () {
-                            expect(layerToTest).to.be.painted(-20, 0);
-                            expect(layerToTest).to.be.painted();
-                            done();
-                        });
-                        layerToTest.removeMask();
-                    });
-                    layerToTest.setMask(new maptalks.Marker(map.getCenter(), {
-                        'symbol' : {
-                            'markerType' : 'ellipse',
-                            'markerWidth' : 10,
-                            'markerHeight' : 10,
-                            'markerFill' : '#000',
-                            'markerFillOpacity' : 1
-                        }
-                    }));
-                });
+                layerToTest.setMask(new maptalks.Marker(map.getCenter(), {
+                    'symbol' : {
+                        'markerType' : 'ellipse',
+                        'markerWidth' : 10,
+                        'markerHeight' : 10,
+                        'markerFill' : '#000',
+                        'markerFillOpacity' : 1
+                    }
+                }));
+                setTimeout(function () {
+                    layerToTest.removeMask();
+                    setTimeout(function () {
+                        expect(layerToTest).to.be.painted(-40, 0);
+                        expect(layerToTest).to.be.painted(-20, 0);
+                        expect(layerToTest).to.be.painted();
+                        done();
+                    }, 50);
+                }, 50);
             });
 
             it('zoom with mask,' + layerToTest.getJSONType(), function (done) {
-                this.timeout(10000);
                 layerToTest.once('layerload', function () {
                     var zoomed = false;
                     layerToTest.on('layerload', function () {
@@ -146,5 +144,44 @@ describe('Spec of Masks', function () {
             });
         });
     }
+
+    it('#713', function (done) {
+        vlayer.setMask(new maptalks.Marker(map.getCenter(), {
+            'symbol' : {
+                'markerType' : 'ellipse',
+                'markerWidth' : 10,
+                'markerHeight' : 10,
+                'markerFill' : '#000',
+                'markerFillOpacity' : 1
+            }
+        }));
+        map.addLayer(vlayer);
+        var canvas = vlayer.getMap().getRenderer().canvas;
+        var c = new maptalks.Point(canvas.width / 2, canvas.height / 2);
+        vlayer.once('layerload', function () {
+            map.removeLayer(vlayer);
+            vlayer.once('layerload', function () {
+                expect(isDrawn(canvas, c.add(-11, 0))).not.to.be.ok();
+                expect(isDrawn(canvas, c.add(0, 0))).to.be.ok();
+                done();
+            });
+            map.addLayer(vlayer);
+        });
+    });
+
+    it('mask of MultiPolygon', function (done) {
+        vlayer.setMask(new maptalks.MultiPolygon([
+            new maptalks.Circle(map.getCenter(), 5).getShell(),
+            new maptalks.Circle(map.locate(map.getCenter(), 10, 0), 5).getShell()
+        ]));
+        map.addLayer(vlayer);
+        var canvas = vlayer.getMap().getRenderer().canvas;
+        var c = new maptalks.Point(canvas.width / 2, canvas.height / 2);
+        vlayer.once('layerload', function () {
+            expect(isDrawn(canvas, c.add(-11, 0))).not.to.be.ok();
+            expect(isDrawn(canvas, c.add(0, 0))).to.be.ok();
+            done();
+        });
+    });
 
 });

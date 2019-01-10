@@ -1,13 +1,17 @@
-import { isNil, isNumber, isArrayHasData, isFunction, mapArrayRecursively } from '../core/util';
+import { isNil, isNumber, isArrayHasData, isFunction, forEachCoord } from '../core/util';
 import { Animation } from '../core/Animation';
 import Coordinate from '../geo/Coordinate';
 import Extent from '../geo/Extent';
 import Geometry from './Geometry';
+import Polygon from './Polygon';
 import simplify from 'simplify-js';
 
 /**
  * @property {Object} options - configuration options
  * @property {String} [options.smoothness=0]      - line smoothing by quad bezier interporating, 0 by default
+ * @property {Boolean} [options.enableSimplify=true] - whether to simplify path before rendering
+ * @property {Number}  [options.simplifyTolerance=2] - tolerance to simplify path, the higher the simplify is more intense
+ * @property {Boolean} [options.enableClip=true] - whether to clip path with map's current extent
  * @property {Object} options.symbol - Path's default symbol
  * @memberOf Path
  * @instance
@@ -16,6 +20,7 @@ const options = {
     'smoothness' : 0,
     'enableClip' : true,
     'enableSimplify' : true,
+    'simplifyTolerance' : 2,
     'symbol': {
         'lineColor': '#000',
         'lineWidth': 2,
@@ -42,7 +47,7 @@ class Path extends Geometry {
         }
         const map = this.getMap();
         const extent = painter.getContainerExtent().convertTo(c => map.containerPointToCoord(c));
-        return new maptalks.Polygon(extent.toArray(), {
+        return new Polygon(extent.toArray(), {
             symbol : {
                 'lineWidth': 1,
                 'lineColor': '6b707b'
@@ -96,10 +101,12 @@ class Path extends Geometry {
             'easing': easing
         }, frame => {
             if (!this.getMap()) {
-                player.finish();
-                if (cb) {
-                    const coordinates = this.getCoordinates();
-                    cb(frame, coordinates[coordinates.length - 1]);
+                if (player.playState !== 'finished') {
+                    player.finish();
+                    if (cb) {
+                        const coordinates = this.getCoordinates();
+                        cb(frame, coordinates[coordinates.length - 1]);
+                    }
                 }
                 return;
             }
@@ -109,6 +116,7 @@ class Path extends Geometry {
                 delete this._aniShowCenter;
                 delete this._animIdx;
                 delete this._animLenSoFar;
+                delete this._animTailRatio;
                 this.setCoordinates(coordinates);
             }
             if (cb) {
@@ -144,18 +152,25 @@ class Path extends Geometry {
             p2 = coordinates[idx + 1],
             span = targetLength - this._animLenSoFar,
             r = span / segLen;
+        this._animTailRatio = r;
         const x = p1.x + (p2.x - p1.x) * r,
             y = p1.y + (p2.y - p1.y) * r,
             targetCoord = new Coordinate(x, y);
-        const animCoords = coordinates.slice(0, this._animIdx + 1);
-        animCoords.push(targetCoord);
         const isPolygon = !!this.getShell;
-        if (isPolygon) {
-            this.setCoordinates([this._aniShowCenter].concat(animCoords));
-        } else {
+        if (!isPolygon && this.options['smoothness'] > 0) {
+            //smooth line needs to set current coordinates plus 2 more to caculate correct control points
+            const animCoords = coordinates.slice(0, this._animIdx + 3);
             this.setCoordinates(animCoords);
+        } else {
+            const animCoords = coordinates.slice(0, this._animIdx + 1);
+            animCoords.push(targetCoord);
+            if (isPolygon) {
+                this.setCoordinates([this._aniShowCenter].concat(animCoords));
+            } else {
+                this.setCoordinates(animCoords);
+            }
         }
-        return animCoords[animCoords.length - 1];
+        return targetCoord;
     }
 
     _getCenterInExtent(extent, coordinates, clipFn) {
@@ -206,7 +221,7 @@ class Path extends Geometry {
         }
         const map = this.getMap(),
             isSimplify = !disableSimplify && this._shouldSimplify(),
-            tolerance = 2 * map._getResolution(),
+            tolerance = this.options['simplifyTolerance'] * map._getResolution(),
             isMulti = Array.isArray(prjCoords[0]);
         delete this._simplified;
         if (isSimplify && !isMulti) {
@@ -217,14 +232,14 @@ class Path extends Geometry {
         if (isNil(zoom)) {
             zoom = map.getZoom();
         }
-        return mapArrayRecursively(prjCoords, c => map._prjToPoint(c, zoom));
+        return forEachCoord(prjCoords, c => map._prjToPoint(c, zoom));
     }
 
     _shouldSimplify() {
         const layer = this.getLayer(),
             properties = this.getProperties();
         const hasAltitude = properties && layer.options['enableAltitude'] && !isNil(properties[layer.options['altitudeProperty']]);
-        return layer && layer.options['enableSimplify'] && !hasAltitude && this.options['enableSimplify'] && !this.options['smoothness'];
+        return layer && layer.options['enableSimplify'] && !hasAltitude && this.options['enableSimplify'] && !this._showPlayer/* && !this.options['smoothness'] */;
     }
 
     _setPrjCoordinates(prjPoints) {

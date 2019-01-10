@@ -10,9 +10,10 @@ Geometry.include(/** @lends Geometry.prototype */ {
      *
      * @param  {Object}   styles          - styles to animate
      * @param  {Object}   [options=null]  - animation options
-     * @param  {Object}   [options.duration=1000]      - duration
-     * @param  {Object}   [options.startTime=null]  - time to start animation in ms
-     * @param  {Object}   [options.easing=linear]   - animation easing: in, out, inAndOut, linear, upAndDown
+     * @param  {NUmber}   [options.duration=1000]      - duration
+     * @param  {Number}   [options.startTime=null]  - time to start animation in ms
+     * @param  {String}   [options.easing=linear]   - animation easing: in, out, inAndOut, linear, upAndDown
+     * @param  {Boolean}  [options.repeat=false]      - repeat animation
      * @param  {Function} [step=null]  - step function during animation, animation frame as the parameter
      * @return {animation.Player} animation player
      * @example
@@ -163,11 +164,35 @@ Geometry.include(/** @lends Geometry.prototype */ {
     _fireAnimateEvent: function (playState) {
         if (playState === 'finished') {
             delete this._animationStarted;
+            /**
+             * fired when geometry's animation ended.
+             *
+             * @event Geometry#animateend
+             * @type {Object}
+             * @property {String} type - animateend
+             * @property {Geometry} target - the geometry fires the event
+             */
             this._fireEvent('animateend');
         } else if (playState === 'running') {
             if (this._animationStarted) {
+                /**
+                 * fired when geometry is animating.
+                 *
+                 * @event Geometry#animating
+                 * @type {Object}
+                 * @property {String} type - animating
+                 * @property {Geometry} target - the geometry fires the event
+                 */
                 this._fireEvent('animating');
             } else {
+                /**
+                 * fired when geometry's animation start.
+                 *
+                 * @event Geometry#animatestart
+                 * @type {Object}
+                 * @property {String} type - animatestart
+                 * @property {Geometry} target - the geometry fires the event
+                 */
                 this._fireEvent('animatestart');
                 this._animationStarted = true;
             }

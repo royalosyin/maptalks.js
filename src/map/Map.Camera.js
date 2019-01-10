@@ -216,10 +216,8 @@ Map.include(/** @lends Map.prototype */{
                 altitude *= this.getResolution(zoom) / this.getResolution();
                 const scale = this._glScale;
                 set(a, point.x * scale, point.y * scale, altitude * scale);
-                // let t = [point.x * scale, point.y * scale, altitude * scale];
 
                 const t = this._projIfBehindCamera(a, this.cameraPosition, this.cameraForward);
-
                 applyMatrix(t, t, this.projViewMatrix);
 
                 const w2 = this.width / 2, h2 = this.height / 2;
@@ -236,22 +234,15 @@ Map.include(/** @lends Map.prototype */{
     // https://forum.unity.com/threads/camera-worldtoscreenpoint-bug.85311/#post-2121212
     _projIfBehindCamera: function () {
         const vectorFromCam = new Array(3);
-        const nVectorFromCam = new Array(3);
         const proj = new Array(3);
         const sub = new Array(3);
         return function (position, cameraPos, camForward) {
             subtract(vectorFromCam, position, cameraPos);
-            const cameraDot = dot(camForward, normalize(nVectorFromCam, vectorFromCam));
-            //const vectorFromCam = position - camera.transform.position;
-            //const camNormDot = dot(camForward, normalize([], vectorFromCam));
-            //if the point is behind the camera then project it onto the camera plane
-            if (cameraDot <= 0) {
-                //we are beind the camera, project the position on the camera plane
-                const camDot = dot(camForward, vectorFromCam);
-                scale(proj, camForward, camDot * 1.01);   //small epsilon to keep the position infront of the camera
+            const camNormDot = dot(camForward, vectorFromCam);
+            if (camNormDot <= 0) {
+                scale(proj, camForward, camNormDot * 1.01);
                 add(position, cameraPos, subtract(sub, vectorFromCam, proj));
             }
-
             return position;
         };
     }(),
@@ -301,12 +292,16 @@ Map.include(/** @lends Map.prototype */{
 
     /**
      * GL Matrices in maptalks (based on THREE):
-     * this.cameraLookAt
-     * this.cameraWorldMatrix
-     * this.projMatrix
-     * this.viewMatrix = cameraWorldMatrix.inverse()
-     * this.projViewMatrix = projMatrix * viewMatrix
-     * this.projViewMatrixInverse = projViewMatrix.inverse()
+     * //based on point at map's gl world zoom, by map.coordToPoint(coord, map.getGLZoom())
+     * map.cameraPosition
+     * map.cameraLookAt
+     * map.cameraUp       //camera's up vector
+     * map.cameraForward  //camera's forward vector
+     * map.cameraWorldMatrix
+     * map.projMatrix
+     * map.viewMatrix = cameraWorldMatrix.inverse()
+     * map.projViewMatrix = projMatrix * viewMatrix
+     * map.projViewMatrixInverse = projViewMatrix.inverse()
      *  @private
      */
     _calcMatrices: function () {
@@ -433,7 +428,5 @@ Map.include(/** @lends Map.prototype */{
 });
 
 function createMat4() {
-    const out = new Float64Array(16);
-    out[0] = out[5] = out[10] = out[15] = 1;
-    return out;
+    return mat4.identity(new Array(16));
 }

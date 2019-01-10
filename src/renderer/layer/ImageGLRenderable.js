@@ -1,7 +1,8 @@
 import { IS_NODE, extend, isInteger, log2 } from '../../core/util';
+import { createGLContext, createProgram, enableVertexAttrib } from '../../core/util/gl';
+import Browser from '../../core/Browser';
 import * as mat4 from '../../core/util/mat4';
 import Canvas from '../../core/Canvas';
-import Browser from '../../core/Browser';
 
 const shaders = {
     'vertexShader': `
@@ -37,8 +38,10 @@ const shaders = {
     `
 };
 
-
-const v2 = new Array(2);
+//reusable temporary variables
+const v2 = [0, 0],
+    v3 = [0, 0, 0],
+    arr16 = new Array(16);
 
 /**
  * A mixin providing image support in WebGL env
@@ -60,10 +63,16 @@ const ImageGLRenderable = Base => {
         drawGLImage(image, x, y, w, h, opacity) {
             const gl = this.gl;
             this.loadTexture(image);
-            gl.uniformMatrix4fv(this.program['u_matrix'], false, this.getProjViewMatrix());
+
+            v3[0] = x || 0;
+            v3[1] = y || 0;
+            const uMatrix = mat4.identity(arr16);
+            mat4.translate(uMatrix, uMatrix, v3);
+            mat4.multiply(uMatrix, this.getMap().projViewMatrix, uMatrix);
+            gl.uniformMatrix4fv(this.program['u_matrix'], false, uMatrix);
             gl.uniform1f(this.program['u_opacity'], opacity);
             if (!image.glBuffer)  {
-                image.glBuffer = this.bufferTileData(x, y, w, h);
+                image.glBuffer = this.bufferTileData(0, 0, w, h);
             } else {
                 gl.bindBuffer(gl.ARRAY_BUFFER, image.glBuffer);
             }
@@ -97,7 +106,7 @@ const ImageGLRenderable = Base => {
         drawTinImage(image, vertices, texCoords, indices, opacity) {
             const gl = this.gl;
             this.loadTexture(image);
-            gl.uniformMatrix4fv(this.program['u_matrix'], false, this.getProjViewMatrix());
+            gl.uniformMatrix4fv(this.program['u_matrix'], false, this.getMap().projViewMatrix);
             gl.uniform1f(this.program['u_opacity'], opacity);
 
             //bufferdata vertices
@@ -118,14 +127,6 @@ const ImageGLRenderable = Base => {
         }
 
         /**
-         * Return map's projection view matrix
-         * @returns {Float32Array}
-         */
-        getProjViewMatrix() {
-            return this.copy16(this.getMap().projViewMatrix);
-        }
-
-        /**
          * Create another GL canvas to draw gl images
          * For layer renderer that needs 2 seperate canvases for 2d and gl
          */
@@ -137,11 +138,16 @@ const ImageGLRenderable = Base => {
          * Get webgl context(this.gl). It prefers canvas2, and will change to this.canvas if canvas2 is not created
          */
         createGLContext() {
-            const gl = this.gl = this._createGLContext(this.canvas2 || this.canvas, this.layer.options['glOptions']);
+            if (this.canvas.gl && this.canvas.gl.wrap) {
+                this.gl = this.canvas.gl.wrap();
+            } else {
+                this.gl = createGLContext(this.canvas2 || this.canvas, this.layer.options['glOptions']);
+            }
+            const gl = this.gl;
             gl.clearColor(0.0, 0.0, 0.0, 0.0);
 
             gl.disable(gl.DEPTH_TEST);
-            gl.disable(gl.STENCIL_TEST);
+            gl.enable(gl.STENCIL_TEST);
 
             gl.enable(gl.BLEND);
             gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -197,8 +203,22 @@ const ImageGLRenderable = Base => {
          */
         clearGLCanvas() {
             if (this.gl) {
-                this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+                this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.STENCIL_BUFFER_BIT);
             }
+        }
+
+        disposeImage(image) {
+            if (!image) {
+                return;
+            }
+            if (image.texture) {
+                this.saveTexture(image.texture);
+            }
+            if (image.glBuffer) {
+                this.saveImageBuffer(image.glBuffer);
+            }
+            delete image.texture;
+            delete image.glBuffer;
         }
 
         _createTexture(image) {
@@ -316,9 +336,9 @@ const ImageGLRenderable = Base => {
             }
             delete this.posBuffer;
             const program = gl.program;
-            gl.deleteProgram(program);
             gl.deleteShader(program.fragmentShader);
             gl.deleteShader(program.vertexShader);
+            gl.deleteProgram(program);
             delete this.gl;
             delete this.canvas2;
         }
@@ -353,63 +373,22 @@ const ImageGLRenderable = Base => {
          * ]);
          */
         enableVertexAttrib(attributes) {
-            const gl = this.gl;
-            if (Array.isArray(attributes[0])) {
-                const verticesTexCoords = new Float32Array([0.0, 0.0, 0.0]);
-                const FSIZE = verticesTexCoords.BYTES_PER_ELEMENT;
-                let STRIDE = 0;
-                for (let i = 0; i < attributes.length; i++) {
-                    STRIDE += (attributes[i][1] || 0);
-                }
-                let offset = 0;
-                for (let i = 0; i < attributes.length; i++) {
-                    const attr = gl.getAttribLocation(gl.program, attributes[i][0]);
-                    if (attr < 0) {
-                        throw new Error('Failed to get the storage location of ' + attributes[i][0]);
-                    }
-                    gl.vertexAttribPointer(attr, attributes[i][1], gl[attributes[i][2] || 'FLOAT'], false, FSIZE * STRIDE, FSIZE * offset);
-                    offset += (attributes[i][1] || 0);
-                    gl.enableVertexAttribArray(attr);
-                }
-            } else {
-                const attr = gl.getAttribLocation(gl.program, attributes[0]);
-                gl.vertexAttribPointer(attr, attributes[1], gl[attributes[2] || 'FLOAT'], false, 0, 0);
-                gl.enableVertexAttribArray(attr);
-            }
+            enableVertexAttrib(this.gl, this.gl.program, attributes);
         }
 
         /**
          * Create the linked program object
-         * @param {String} vshader a vertex shader program (string)
-         * @param {String} fshader a fragment shader program (string)
+         * @param {String} vert a vertex shader program (string)
+         * @param {String} frag a fragment shader program (string)
          * @return {WebGLProgram} created program object, or null if the creation has failed
          */
-        createProgram(vshader, fshader, uniforms) {
+        createProgram(vert, frag, uniforms) {
             const gl = this.gl;
-            // Create shader object
-            const vertexShader = this._compileShader(gl, gl.VERTEX_SHADER, vshader);
-            const fragmentShader = this._compileShader(gl, gl.FRAGMENT_SHADER, fshader);
-            if (!vertexShader || !fragmentShader) {
-                return null;
-            }
-
-            // Create a program object
-            const program = gl.createProgram();
-            if (!program) {
-                return null;
-            }
-
-            // Attach the shader objects
-            gl.attachShader(program, vertexShader);
-            gl.attachShader(program, fragmentShader);
-
-            // Link the program object
-            gl.linkProgram(program);
+            const { program, vertexShader, fragmentShader } = createProgram(gl, vert, frag);
             program.vertexShader = vertexShader;
             program.fragmentShader = fragmentShader;
 
             this._initUniforms(program, uniforms);
-
             return program;
         }
 
@@ -440,55 +419,6 @@ const ImageGLRenderable = Base => {
             return uSampler;
         }
 
-        _createGLContext(canvas, options) {
-            const attributes = {
-                'alpha': true,
-                'preserveDrawingBuffer' : true,
-                'antialias' : false
-            };
-            const names = ['webgl', 'experimental-webgl'];
-            let context = null;
-            /* eslint-disable no-empty */
-            for (let i = 0; i < names.length; ++i) {
-                try {
-                    context = canvas.getContext(names[i], options || attributes);
-                } catch (e) {}
-                if (context) {
-                    break;
-                }
-            }
-            return context;
-            /* eslint-enable no-empty */
-        }
-
-        /**
-         * Create a shader object
-         * @param gl GL context
-         * @param type the type of the shader object to be created
-         * @param source shader program (string)
-         * @return created shader object, or null if the creation has failed.
-         */
-        _compileShader(gl, type, source) {
-            // Create shader object
-            const shader = gl.createShader(type);
-
-            // Set the shader program
-            gl.shaderSource(shader, source);
-            // Compile the shader
-            gl.compileShader(shader);
-
-            // Check the result of compilation
-            const compiled = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
-            if (!compiled) {
-                const error = gl.getShaderInfoLog(shader);
-
-                gl.deleteShader(shader);
-                throw new Error('Failed to compile shader: ' + error);
-            }
-
-            return shader;
-        }
-
         _initUniforms(program, uniforms) {
             for (let i = 0; i < uniforms.length; i++) {
                 let name = uniforms[i];
@@ -516,15 +446,8 @@ const ImageGLRenderable = Base => {
     };
 
     extend(renderable.prototype, {
-        copy16: function () {
-            const m = Browser.ie9 ? null : new Float32Array(16);
-            return function (arr) {
-                return mat4.copy(m, arr);
-            };
-        }(),
-
         set12: function () {
-            const out = new Float32Array(12);
+            const out = Browser.ie9 ? null : new Float32Array(12);
             return function (a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11) {
                 out[0] = a0;
                 out[1] = a1;
@@ -547,5 +470,3 @@ const ImageGLRenderable = Base => {
 };
 
 export default ImageGLRenderable;
-
-

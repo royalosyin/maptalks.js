@@ -29,9 +29,7 @@ let requestAnimFrame, cancelAnimFrame;
 
         requestFn = window['requestAnimationFrame'] || getPrefixed('RequestAnimationFrame') || timeoutDefer;
         cancelFn = window['cancelAnimationFrame'] || getPrefixed('CancelAnimationFrame') ||
-            getPrefixed('CancelRequestAnimationFrame') || function (id) {
-                window.clearTimeout(id);
-            };
+            getPrefixed('CancelRequestAnimationFrame') || function (id) { window.clearTimeout(id); };
     } else {
         requestFn = timeoutDefer;
         cancelFn = clearTimeout;
@@ -106,11 +104,16 @@ export function parseJSON(str) {
     return JSON.parse(str);
 }
 
-export function pushIn(arr1, arr2) {
-    for (let i = 0, l = arr2.length; i < l; i++) {
-        arr1.push(arr2[i]);
+export function pushIn(dest) {
+    for (let i = 1; i < arguments.length; i++) {
+        const src = arguments[i];
+        if (src) {
+            for (let ii = 0, ll = src.length; ii < ll; ii++) {
+                dest.push(src[ii]);
+            }
+        }
     }
-    return arr1.length;
+    return dest.length;
 }
 
 export function removeFromArray(obj, array) {
@@ -120,7 +123,7 @@ export function removeFromArray(obj, array) {
     }
 }
 
-export function mapArrayRecursively(arr, fn, context) {
+export function forEachCoord(arr, fn, context) {
     if (!Array.isArray(arr)) {
         return context ? fn.call(context, arr) : fn(arr);
     }
@@ -133,7 +136,7 @@ export function mapArrayRecursively(arr, fn, context) {
             continue;
         }
         if (Array.isArray(p)) {
-            result.push(mapArrayRecursively(p, fn, context));
+            result.push(forEachCoord(p, fn, context));
         } else {
             pp = context ? fn.call(context, p) : fn(p);
             result.push(pp);
@@ -330,6 +333,17 @@ export function btoa(input) {
     return output;
 }
 
+export function b64toBlob(b64Data, contentType) {
+    const byteCharacters = atob(b64Data);
+    const arraybuffer = new ArrayBuffer(byteCharacters.length);
+    const view = new Uint8Array(arraybuffer);
+    for (let i = 0; i < byteCharacters.length; i++) {
+        view[i] = byteCharacters.charCodeAt(i) & 0xff;
+    }
+    const blob = new Blob([arraybuffer], { type: contentType });
+    return blob;
+}
+
 /**
  * Compute degree bewteen 2 points.
  * @param  {Point} p1 point 1
@@ -430,4 +444,16 @@ export function flash(interval, count, cb, context) {
     }
     this._flashTimeout = setTimeout(flashGeo, interval);
     return this;
+}
+
+export function _defaults(obj, defaults) {
+    const keys = Object.getOwnPropertyNames(defaults);
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        const value = Object.getOwnPropertyDescriptor(defaults, key);
+        if (value && value.configurable && obj[key] === undefined) {
+            Object.defineProperty(obj, key, value);
+        }
+    }
+    return obj;
 }

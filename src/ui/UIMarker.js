@@ -193,7 +193,7 @@ const domEvents =
  * @example
  * var dom = document.createElement('div');
  * dom.innerHTML = 'hello ui marker';
- * var marker = new maptalks.UIMarker([0, 0], {
+ * var marker = new maptalks.ui.UIMarker([0, 0], {
  *      draggable : true,
  *      content : dom
  *  }).addTo(map);
@@ -235,7 +235,8 @@ class UIMarker extends Handlerable(UIComponent) {
          */
         this.fire('positionchange');
         if (this.isVisible()) {
-            this.show();
+            this._coordinate = this._markerCoord;
+            this._setPosition();
         }
         return this;
     }
@@ -337,7 +338,7 @@ class UIMarker extends Handlerable(UIComponent) {
      */
     getOffset() {
         const size = this.getSize();
-        return new Point(-size['width'] / 2, -size['height'] / 2);
+        return new Point(-size.width / 2, -size.height / 2);
     }
 
     /**
@@ -346,8 +347,7 @@ class UIMarker extends Handlerable(UIComponent) {
      * @return {Point} transform origin
      */
     getTransformOrigin() {
-        const size = this.getSize();
-        return new Point(size['width'] / 2, size['height'] / 2);
+        return 'center center';
     }
 
     onDomRemove() {

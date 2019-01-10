@@ -9,7 +9,7 @@ import {
     isString,
     isNumber,
     isObject,
-    mapArrayRecursively,
+    forEachCoord,
     flash
 } from '../core/util';
 import { extendSymbol } from '../core/util/style';
@@ -25,6 +25,7 @@ import SpatialReference from '../map/spatial-reference/SpatialReference';
  * @property {Boolean} [options.id=null]            - id of the geometry
  * @property {Boolean} [options.visible=true]       - whether the geometry is visible.
  * @property {Boolean} [options.editable=true]      - whether the geometry can be edited.
+ * @property {Boolean} [options.interactive=true]   - whether the geometry can be interactived.
  * @property {String} [options.cursor=null]         - cursor style when mouseover the geometry, same as the definition in CSS.
  * @property {String} [options.measure=EPSG:4326]   - the measure code for the geometry, defines {@tutorial measureGeometry how it can be measured}.
  * @property {Boolean} [options.draggable=false]    - whether the geometry can be dragged.
@@ -37,6 +38,7 @@ import SpatialReference from '../map/spatial-reference/SpatialReference';
 const options = {
     'id': null,
     'visible': true,
+    'interactive':true,
     'editable': true,
     'cursor': null,
     'defaultProjection': 'EPSG:4326' // BAIDU, IDENTITY
@@ -569,7 +571,7 @@ class Geometry extends JSONAble(Eventable(Handlerable(Class))) {
         const coordinates = this.getCoordinates();
         if (coordinates) {
             if (Array.isArray(coordinates)) {
-                const translated = mapArrayRecursively(coordinates, function (coord) {
+                const translated = forEachCoord(coordinates, function (coord) {
                     return coord.add(offset);
                 });
                 this.setCoordinates(translated);
@@ -758,6 +760,39 @@ class Geometry extends JSONAble(Eventable(Handlerable(Class))) {
      */
     getArea() {
         return this._computeGeodesicArea(this._getMeasurer());
+    }
+
+    /**
+     * Rotate the geometry of given angle around a pivot point
+     * @param {Number} angle - angle to rotate in degree
+     * @param {Coordinate} [pivot=null]  - optional, will be the geometry's center by default
+     * @returns {Geometry} this
+     */
+    rotate(angle, pivot) {
+        if (this.type === 'GeometryCollection') {
+            const geometries = this.getGeometries();
+            geometries.forEach(g => g.rotate(angle, pivot));
+            return this;
+        }
+        if (!pivot) {
+            pivot = this.getCenter();
+        } else {
+            pivot = new Coordinate(pivot);
+        }
+        const measurer = this._getMeasurer();
+        const coordinates = this.getCoordinates();
+        if (!Array.isArray(coordinates)) {
+            if (pivot.x !== coordinates.x || pivot.y !== coordinates.y) {
+                const c = measurer._rotate(coordinates, pivot, angle);
+                this.setCoordinates(c);
+            }
+            return this;
+        }
+        forEachCoord(coordinates, c => {
+            return measurer._rotate(c, pivot, angle);
+        });
+        this.setCoordinates(coordinates);
+        return this;
     }
 
     /**

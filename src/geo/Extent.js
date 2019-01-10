@@ -7,7 +7,7 @@ import Size from './Size';
  * There are serveral ways to create a extent:
  * @category basic types
  * @example
- * //with 4 numbers
+ * //with 4 numbers: xmin, ymin, xmax and ymax
  * var extent = new Extent(100, 10, 120, 20);
  * @example
  * //with 2 coordinates
@@ -447,25 +447,28 @@ class Extent {
      * @returns {Extent} a new extent expanded from
      */
     expand(distance) {
-        if (distance instanceof Size) {
-            return new this.constructor(this['xmin'] - distance['width'], this['ymin'] - distance['height'], this['xmax'] + distance['width'], this['ymax'] + distance['height'], this.projection);
+        let w, h;
+        if (!isNumber(distance)) {
+            w = distance['width'] || distance['x'] || distance[0] || 0;
+            h = distance['height'] || distance['y'] || distance[1] || 0;
         } else {
-            return new this.constructor(this['xmin'] - distance, this['ymin'] - distance, this['xmax'] + distance, this['ymax'] + distance, this.projection);
+            w = h = distance;
         }
+        return new this.constructor(this['xmin'] - w, this['ymin'] - h, this['xmax'] + w, this['ymax'] + h, this.projection);
     }
 
     _expand(distance) {
-        if (distance instanceof Size) {
-            this['xmin'] -= distance['width'];
-            this['ymin'] -= distance['height'];
-            this['xmax'] += distance['width'];
-            this['ymax'] += distance['height'];
+        let w, h;
+        if (!isNumber(distance)) {
+            w = distance['width'] || distance['x'] || distance[0] || 0;
+            h = distance['height'] || distance['y'] || distance[1] || 0;
         } else {
-            this['xmin'] -= distance;
-            this['ymin'] -= distance;
-            this['xmax'] += distance;
-            this['ymax'] += distance;
+            w = h = distance;
         }
+        this['xmin'] -= w;
+        this['ymin'] -= h;
+        this['xmax'] += w;
+        this['ymax'] += h;
         this._dirty = true;
         return this;
     }
@@ -524,13 +527,14 @@ class Extent {
             return null;
         }
         const e = new this.constructor();
-        const coords = this.toArray();
-        const len = coords.length;
-        coords.forEach((c, idx) => {
-            if (idx < len - 1) {
-                e._combine(fn(c));
-            }
-        });
+        const coord = new this._clazz(this.xmin, this.ymax);
+        e._combine(fn(coord));
+        coord.x = this.xmax;
+        e._combine(fn(coord));
+        coord.y = this.ymin;
+        e._combine(fn(coord));
+        coord.x = this.xmin;
+        e._combine(fn(coord));
         return e;
     }
 

@@ -306,6 +306,15 @@ class GeometryEditor extends Eventable(Class) {
 
         function onHandleDragstart(param) {
             if (opts.onDown) {
+                /**
+                 * change geometry shape start event, fired when drag to change geometry shape.
+                 *
+                 * @event Geometry#handledragstart
+                 * @type {Object}
+                 * @property {String} type - handledragstart
+                 * @property {Geometry} target - the geometry fires the event
+                 */
+                this._geometry.fire('handledragstart');
                 opts.onDown.call(me, param['viewPoint'], param);
             }
             return false;
@@ -315,6 +324,15 @@ class GeometryEditor extends Eventable(Class) {
             me._hideContext();
             const viewPoint = map._prjToViewPoint(handle._getPrjCoordinates());
             if (opts.onMove) {
+                /**
+                 * changing geometry shape event, fired when dragging to change geometry shape.
+                 *
+                 * @event Geometry#handledragging
+                 * @type {Object}
+                 * @property {String} type - handledragging
+                 * @property {Geometry} target - the geometry fires the event
+                 */
+                this._geometry.fire('handledragging');
                 opts.onMove.call(me, viewPoint, param);
             }
             return false;
@@ -322,13 +340,33 @@ class GeometryEditor extends Eventable(Class) {
 
         function onHandleDragEnd(ev) {
             if (opts.onUp) {
+                /**
+                 * changed geometry shape event, fired when drag end to change geometry shape.
+                 *
+                 * @event Geometry#handledragend
+                 * @type {Object}
+                 * @property {String} type - handledragend
+                 * @property {Geometry} target - the geometry fires the event
+                 */
+                this._geometry.fire('handledragend');
                 opts.onUp.call(me, ev);
             }
             return false;
         }
+
+        function onHandleRemove() {
+            handle.config('draggable', false);
+            handle.off('dragstart', onHandleDragstart, me);
+            handle.off('dragging', onHandleDragging, me);
+            handle.off('dragend', onHandleDragEnd, me);
+            handle.off('removestart', onHandleRemove, me);
+            delete handle['maptalks--editor-refresh-fn'];
+        }
+
         handle.on('dragstart', onHandleDragstart, this);
         handle.on('dragging', onHandleDragging, this);
         handle.on('dragend', onHandleDragEnd, this);
+        handle.on('removestart', onHandleRemove, this);
         //拖动移图
         if (opts.onRefresh) {
             handle['maptalks--editor-refresh-fn'] = opts.onRefresh;
@@ -745,6 +783,7 @@ class GeometryEditor extends Eventable(Class) {
             for (let i = newVertexHandles.length - 1; i >= 0; i--) {
                 newVertexHandles[i][propertyOfVertexIndex] = i;
             }
+            me._updateCoordFromShadow();
         }
 
         function removeVertex(param) {
@@ -816,6 +855,11 @@ class GeometryEditor extends Eventable(Class) {
                 onUp: function () {
                     me._refresh();
                     me._updateCoordFromShadow();
+                },
+                onDown: function (param, e) {
+                    if (e && e.domEvent && e.domEvent.button === 2) {
+                        return;
+                    }
                 }
             });
             handle[propertyOfVertexIndex] = index;

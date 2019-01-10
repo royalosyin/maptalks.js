@@ -63,6 +63,7 @@ class WMSTileLayer extends TileLayer {
             }
         }
         this.setOptions(options);
+        this.setZIndex(options.zIndex);
         const r = options.detectRetina && Browser.retina ? 2 : 1,
             tileSize = this.getTileSize();
         wmsParams.width = tileSize.width * r;
@@ -75,11 +76,11 @@ class WMSTileLayer extends TileLayer {
         const crs = this.options.crs || this.getMap().getProjection().code;
         const projectionKey = this._wmsVersion >= 1.3 ? 'crs' : 'srs';
         this.wmsParams[projectionKey] = crs;
+        super.onAdd();
     }
 
     getTileUrl(x, y, z) {
-        const map = this.getMap(),
-            res = map._getResolution(z),
+        const res = this.getSpatialReference().getResolution(z),
             tileConfig = this._getTileConfig(),
             tileExtent = tileConfig.getTilePrjExtent(x, y, res);
         const max = tileExtent.getMax(),

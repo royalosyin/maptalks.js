@@ -7,7 +7,8 @@ import {
     isString,
     isFunction,
     sign,
-    UID
+    UID,
+    b64toBlob
 } from '../core/util';
 import Class from '../core/Class';
 import Browser from '../core/Browser';
@@ -40,6 +41,7 @@ import SpatialReference from './spatial-reference/SpatialReference';
  * @property {Number}  [options.maxZoom=null]                   - the maximum zoom the map can be zooming to.
  * @property {Number}  [options.minZoom=null]                   - the minimum zoom the map can be zooming to.
  * @property {Extent}  [options.maxExtent=null]         - when maxExtent is set, map will be restricted to the give max extent and bouncing back when user trying to pan ouside the extent.
+ * @property {Boolean} [options.fixCenterOnResize=false]        - whether to fix map center when map is resized
  *
  * @property {Number}  [options.maxPitch=80]                    - max pitch
  * @property {Number}  [options.maxVisualPitch=60]              - the max pitch to be visual
@@ -51,13 +53,13 @@ import SpatialReference from './spatial-reference/SpatialReference';
  * @property {Boolean} [options.dragPan=true]                           - if true, map can be dragged to pan.
  * @property {Boolean} [options.dragRotate=true]                        - default true. If true, map can be dragged to rotate by right click or ctrl + left click.
  * @property {Boolean} [options.dragPitch=true]                         - default true. If true, map can be dragged to pitch by right click or ctrl + left click.
- * @property {Boolean} [options.dragRotatePitch=false]                  - if true, map is dragged to pitch and rotate at the same time.
+ * @property {Boolean} [options.dragRotatePitch=true]                  - if true, map is dragged to pitch and rotate at the same time.
  * @property {Boolean} [options.touchGesture=true]                      - whether to allow map to zoom/rotate/tilt by two finger touch gestures.
  * @property {Boolean} [options.touchZoom=true]                         - whether to allow map to zoom by touch pinch.
  * @property {Boolean} [options.touchRotate=true]                       - whether to allow map to rotate by touch pinch.
  * @property {Boolean} [options.touchPitch=true]                        - whether to allow map to pitch by touch pinch.
  * @property {Boolean} [options.touchZoomRotate=false]                  - if true, map is to zoom and rotate at the same time by touch pinch.
- * @property {Boolean} [options.doublClickZoom=true]                    - whether to allow map to zoom by double click events.
+ * @property {Boolean} [options.doubleClickZoom=true]                    - whether to allow map to zoom by double click events.
  * @property {Boolean} [options.scrollWheelZoom=true]                   - whether to allow map to zoom by scroll wheel events.
  * @property {Boolean} [options.geometryEvents=true]                    - enable/disable firing geometry events
  *
@@ -107,6 +109,7 @@ const options = {
     'maxZoom': null,
     'minZoom': null,
     'maxExtent': null,
+    'fixCenterOnResize' : false,
 
     'checkSize': true,
 
@@ -208,6 +211,7 @@ class Map extends Handlerable(Eventable(Renderable(Class))) {
 
     /**
      * Add hooks for additional codes when map's loading complete, useful for plugin developping.
+     * Note that it can only be called before the map is created.
      * @param {Function} fn
      * @returns {Map}
      * @protected
@@ -283,9 +287,14 @@ class Map extends Handlerable(Eventable(Renderable(Class))) {
      */
     setSpatialReference(ref) {
         const oldRef = this.options['spatialReference'];
-        if (oldRef && !ref) {
+        if (this._loaded && SpatialReference.equals(oldRef, ref)) {
             return this;
         }
+        this._updateSpatialReference(ref, oldRef);
+        return this;
+    }
+
+    _updateSpatialReference(ref, oldRef) {
         ref = extend({}, ref);
         this._center = this.getCenter();
         this.options['spatialReference'] = ref;
@@ -337,7 +346,7 @@ class Map extends Handlerable(Eventable(Renderable(Class))) {
     onConfig(conf) {
         const ref = conf['spatialReference'] || conf['view'];
         if (!isNil(ref)) {
-            this.setSpatialReference(ref);
+            this._updateSpatialReference(ref, null);
         }
         return this;
     }
@@ -648,7 +657,7 @@ class Map extends Handlerable(Eventable(Renderable(Class))) {
         if (!isNil(this.options['minZoom'])) {
             return this.options['minZoom'];
         }
-        return 0;
+        return this._spatialReference.getMinZoom();
     }
 
     /**
@@ -805,14 +814,14 @@ class Map extends Handlerable(Eventable(Renderable(Class))) {
         if (view['center']) {
             this.setCenter(view['center']);
         }
-        if (view['zoom']) {
-            this.setZoom(view['zoom'], { 'animation' : false });
+        if (view['zoom'] !== null && !isNaN(+view['zoom'])) {
+            this.setZoom(+view['zoom'], { 'animation' : false });
         }
-        if (view['pitch']) {
-            this.setPitch(view['pitch']);
+        if (view['pitch'] !== null && !isNaN(+view['pitch'])) {
+            this.setPitch(+view['pitch']);
         }
-        if (view['bearing']) {
-            this.setBearing(view['bearing']);
+        if (view['pitch'] !== null && !isNaN(+view['bearing'])) {
+            this.setBearing(+view['bearing']);
         }
         return this;
     }
@@ -844,14 +853,23 @@ class Map extends Handlerable(Eventable(Renderable(Class))) {
      * @param  {Number} zoomOffset - zoom offset
      * @return {Map} - this
      */
-    fitExtent(extent, zoomOffset) {
+    fitExtent(extent, zoomOffset, options = {}, step) {
         if (!extent) {
             return this;
         }
         extent = new Extent(extent, this.getProjection());
         const zoom = this.getFitZoom(extent) + (zoomOffset || 0);
         const center = extent.getCenter();
-        return this.setCenterAndZoom(center, zoom);
+        if (typeof (options['animation']) === 'undefined' || options['animation'])
+            return this.animateTo({
+                center,
+                zoom
+            }, {
+                'duration' : options['duration'] || this.options['zoomAnimationDuration'],
+                'easing' : options['easing'] || 'out',
+            }, step);
+        else
+            return this.setCenterAndZoom(center, zoom);
     }
 
     /**
@@ -1172,12 +1190,16 @@ class Map extends Handlerable(Eventable(Renderable(Class))) {
             }
             const dataURL = renderer.toDataURL(mimeType);
             if (save && dataURL) {
-                const imgURL = dataURL;
-
+                let imgURL;
+                if (typeof Blob !== 'undefined' && typeof atob !== 'undefined') {
+                    const blob = b64toBlob(dataURL.replace(/^data:image\/(png|jpeg|jpg);base64,/, ''), mimeType);
+                    imgURL = URL.createObjectURL(blob);
+                } else {
+                    imgURL = dataURL;
+                }
                 const dlLink = document.createElement('a');
                 dlLink.download = file;
                 dlLink.href = imgURL;
-                dlLink.dataset.downloadurl = [mimeType, dlLink.download, dlLink.href].join(':');
 
                 document.body.appendChild(dlLink);
                 dlLink.click();
@@ -1352,10 +1374,14 @@ class Map extends Handlerable(Eventable(Renderable(Class))) {
         }
         const center = this.getCenter();
         this._updateMapSize(watched);
-        const resizeOffset = new Point((oldWidth - watched.width) / 2, (oldHeight - watched.height) / 2);
-        this._offsetCenterByPixel(resizeOffset);
-        // when size changed, center is updated but panel's offset remains.
-        this._mapViewCoord = this._getPrjCenter();
+
+        if (!this.options['fixCenterOnResize']) {
+            const resizeOffset = new Point((oldWidth - watched.width) / 2, (oldHeight - watched.height) / 2);
+            this._offsetCenterByPixel(resizeOffset);
+            // when size changed, center is updated but panel's offset remains.
+            this._mapViewCoord = this._getPrjCenter();
+        }
+
         const hided = (watched['width'] === 0 ||  watched['height'] === 0 || oldWidth === 0 || oldHeight === 0);
 
         if (justStart || hided) {
@@ -1398,6 +1424,28 @@ class Map extends Handlerable(Eventable(Renderable(Class))) {
     }
 
     /**
+     * Converts geographical distances to the 2d point length.<br>
+     * The value varis with difference zoom level.
+     *
+     * @param  {Number} xDist - distance on X axis.
+     * @param  {Number} yDist - distance on Y axis.
+     * @param  {Number} zoom - point's zoom
+     * @return {Point}
+     */
+    distanceToPoint(xDist, yDist, zoom) {
+        const projection = this.getProjection();
+        if (!projection) {
+            return null;
+        }
+        const center = this.getCenter(),
+            target = projection.locate(center, xDist, yDist);
+        const p0 = this.coordToPoint(center, zoom),
+            p1 = this.coordToPoint(target, zoom);
+        p1._sub(p0)._abs();
+        return p1;
+    }
+
+    /**
      * Converts pixel size to geographical distance.
      *
      * @param  {Number} width - pixel width
@@ -1417,6 +1465,25 @@ class Map extends Handlerable(Eventable(Renderable(Class))) {
     }
 
     /**
+     * Converts 2d point distances to geographic length.<br>
+     *
+     * @param  {Number} dx - distance on X axis.
+     * @param  {Number} dy - distance on Y axis.
+     * @param  {Number} zoom - point's zoom
+     * @return {Number} distance
+     */
+    pointToDistance(dx, dy, zoom) {
+        const projection = this.getProjection();
+        if (!projection) {
+            return null;
+        }
+        const c = this._prjToPoint(this._getPrjCenter(), zoom);
+        c._add(dx, dy);
+        const target = this.pointToCoord(c, zoom);
+        return projection.measureLength(this.getCenter(), target);
+    }
+
+    /**
      * Computes the coordinate from the given meter distance.
      * @param  {Coordinate} coordinate - source coordinate
      * @param  {Number} dx           - meter distance on X axis
@@ -1424,7 +1491,7 @@ class Map extends Handlerable(Eventable(Renderable(Class))) {
      * @return {Coordinate} Result coordinate
      */
     locate(coordinate, dx, dy) {
-        return this.getProjection().locate(new Coordinate(coordinate), dx, dy);
+        return this.getProjection()._locate(new Coordinate(coordinate), dx, dy);
     }
 
     /**
@@ -1859,6 +1926,7 @@ class Map extends Handlerable(Eventable(Renderable(Class))) {
         delete this._prjCenter;
         const projection = this.getProjection();
         this._prjCenter = projection.project(this._center);
+        this._calcMatrices();
         const renderer = this._getRenderer();
         if (renderer) {
             renderer.resetContainer();

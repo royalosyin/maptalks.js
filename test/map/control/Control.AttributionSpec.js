@@ -14,8 +14,8 @@ describe('Control.Attribution', function () {
     });
     it('set map.options.attribution to false', function () {
         container = document.createElement('div');
-        container.style.width = '800px';
-        container.style.height = '600px';
+        container.style.width = '10px';
+        container.style.height = '10px';
         document.body.appendChild(container);
         var option = {
             zoom: 17,
@@ -25,7 +25,7 @@ describe('Control.Attribution', function () {
         map = new maptalks.Map(container, option);
 
         var tileLayer = new maptalks.TileLayer('boudaries', {
-            urlTemplate : '/resources/tile.png',
+            urlTemplate : '#',
             'subdomains': ['a', 'b', 'c', 'd'],
             'attribution': 'guzr'
         });
@@ -38,8 +38,8 @@ describe('Control.Attribution', function () {
 
     it('add attribution of added layer; no baseLayer', function () {
         container = document.createElement('div');
-        container.style.width = '800px';
-        container.style.height = '600px';
+        container.style.width = '10px';
+        container.style.height = '10px';
         document.body.appendChild(container);
         var option = {
             zoom: 17,
@@ -49,39 +49,39 @@ describe('Control.Attribution', function () {
         map = new maptalks.Map(container, option);
 
         var tileLayer = new maptalks.TileLayer('boudaries', {
-            urlTemplate : '/resources/tile.png',
+            urlTemplate : '#',
             'subdomains': ['a', 'b', 'c', 'd'],
             'attribution': 'guzr'
         });
         map.addLayer(tileLayer);
-        var expectResult = 'Powered by <a href="http://maptalks.org" target="_blank">maptalks</a> - guzr';
+        var expectResult = '<a href="http://maptalks.org" target="_blank">maptalks</a> - guzr';
         var realResult = document.getElementsByClassName('maptalks-attribution')[0].firstChild.innerHTML;
 
         expect(expectResult).to.eql(realResult);
     });
     it('has baseLayer', function () {
         container = document.createElement('div');
-        container.style.width = '800px';
-        container.style.height = '600px';
+        container.style.width = '10px';
+        container.style.height = '10px';
         document.body.appendChild(container);
         var option = {
             zoom: 17,
             center: center,
             baseLayer: new maptalks.TileLayer('base', {
-                urlTemplate : '/resources/tile.png',
+                urlTemplate : '#',
                 subdomains: ['a', 'b', 'c', 'd'],
                 attribution: '&copy; <a href="https://carto.com/">CARTO</a>'
             })
         };
         map = new maptalks.Map(container, option);
-        var expectResult = 'Powered by <a href="http://maptalks.org" target="_blank">maptalks</a> - © <a href="https://carto.com/">CARTO</a>';
+        var expectResult = '<a href="http://maptalks.org" target="_blank">maptalks</a> - © <a href="https://carto.com/">CARTO</a>';
         var realResult = document.getElementsByClassName('maptalks-attribution')[0].firstChild.innerHTML;
         expect(expectResult).to.eql(realResult);
     });
     it('no attribution content in map options', function () {
         container = document.createElement('div');
-        container.style.width = '800px';
-        container.style.height = '600px';
+        container.style.width = '10px';
+        container.style.height = '10px';
         document.body.appendChild(container);
         var option = {
             zoom: 17,
@@ -91,14 +91,14 @@ describe('Control.Attribution', function () {
             }
         };
         map = new maptalks.Map(container, option);
-        var expectResult = 'Powered by <a href="http://maptalks.org" target="_blank">maptalks</a>';
+        var expectResult = '<a href="http://maptalks.org" target="_blank">maptalks</a>';
         var realResult = document.getElementsByClassName('maptalks-attribution')[0].firstChild.innerHTML;
         expect(expectResult).to.eql(realResult);
     });
     it('set custom attribution content', function () {
         container = document.createElement('div');
-        container.style.width = '800px';
-        container.style.height = '600px';
+        container.style.width = '10px';
+        container.style.height = '10px';
         document.body.appendChild(container);
         var option = {
             zoom: 17,
@@ -115,8 +115,8 @@ describe('Control.Attribution', function () {
     });
     it('set custom attribution content and add layer', function () {
         container = document.createElement('div');
-        container.style.width = '800px';
-        container.style.height = '600px';
+        container.style.width = '10px';
+        container.style.height = '10px';
         document.body.appendChild(container);
         var option = {
             zoom: 17,
@@ -128,7 +128,7 @@ describe('Control.Attribution', function () {
         };
         map = new maptalks.Map(container, option);
         var tileLayer = new maptalks.TileLayer('boudaries', {
-            urlTemplate : '/resources/tile.png',
+            urlTemplate : '#',
             'subdomains': ['a', 'b', 'c', 'd'],
             'attribution': 'guzr'
         });

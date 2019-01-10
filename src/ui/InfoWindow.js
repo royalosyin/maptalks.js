@@ -1,7 +1,7 @@
 import { isString } from '../core/util';
-import { createEl } from '../core/util/dom';
+import { createEl, addDomEvent, removeDomEvent } from '../core/util/dom';
 import Point from '../geo/Point';
-import { Geometry, Marker } from '../geometry';
+import { Geometry, Marker, MultiPoint } from '../geometry';
 import UIComponent from './UIComponent';
 
 
@@ -147,15 +147,23 @@ class InfoWindow extends UIComponent {
         const dom = createEl('div');
         dom.className = 'maptalks-msgBox';
         dom.style.width = this._getWindowWidth() + 'px';
+        dom.style.bottom = '0px'; // fix #657
         let content = '<em class="maptalks-ico"></em>';
         if (this.options['title']) {
             content += '<h2>' + this.options['title'] + '</h2>';
         }
-        const onClose = '"this.parentNode.style.display=\'none\';return false;"';
-        content += '<a href="javascript:void(0);" onclick=' + onClose +
-            ' ontouchend=' + onClose +
-            ' class="maptalks-close"></a><div class="maptalks-msgContent">' + this.options['content'] + '</div>';
+        content += '<a href="javascript:void(0);" class="maptalks-close"></a><div class="maptalks-msgContent"></div>';
         dom.innerHTML = content;
+        const msgContent = dom.querySelector('.maptalks-msgContent');
+        if (isString(this.options['content'])) {
+            msgContent.innerHTML = this.options['content'];
+        } else {
+            msgContent.appendChild(this.options['content']);
+        }
+        this._onCloseBtnClick = this.hide.bind(this);
+        const closeBtn = dom.querySelector('.maptalks-close');
+        addDomEvent(closeBtn, 'click touchend', this._onCloseBtnClick);
+
         return dom;
     }
 
@@ -166,23 +174,32 @@ class InfoWindow extends UIComponent {
      */
     getTransformOrigin() {
         const size = this.getSize();
-        const o = new Point(size['width'] / 2, size['height']);
-        if (!this.options['custom']) {
-            o._add(4, 12);
-        }
-        return o;
+        return size.width / 2 + 'px bottom';
     }
 
     getOffset() {
         const size = this.getSize();
-        const o = new Point(-size['width'] / 2, -size['height']);
+        const o = new Point(-size['width'] / 2, 0);
         if (!this.options['custom']) {
             o._sub(4, 12);
         }
-        if (this.getOwner() instanceof Marker) {
-            const markerSize = this.getOwner().getSize();
-            if (markerSize) {
-                o._add(0, -markerSize['height']);
+        const owner = this.getOwner();
+        if (owner instanceof Marker || owner instanceof MultiPoint) {
+            let painter, markerSize;
+            if (owner instanceof Marker) {
+                painter = owner._getPainter();
+                markerSize = owner.getSize();
+            } else {
+                const children = owner.getGeometries();
+                if (!children || !children.length) {
+                    return o;
+                }
+                painter = children[0]._getPainter();
+                markerSize = children[0].getSize();
+            }
+            if (painter) {
+                const fixExtent = painter.getFixedExtent();
+                o._add(fixExtent.xmax - markerSize.width / 2, fixExtent.ymin);
             }
         }
         return o;
@@ -217,11 +234,26 @@ class InfoWindow extends UIComponent {
         return events;
     }
 
+    onRemove() {
+        this.onDomRemove();
+    }
+
+    onDomRemove() {
+        if (this._onCloseBtnClick) {
+            const dom = this.getDOM();
+            const closeBtn = dom.childNodes[2];
+            removeDomEvent(closeBtn, 'click touchend', this._onCloseBtnClick);
+            delete this._onCloseBtnClick;
+        }
+    }
+
     _onAutoOpen(e) {
         const owner = this.getOwner();
         setTimeout(() => {
             if (owner instanceof Marker) {
                 this.show(owner.getCoordinates());
+            } else if (owner instanceof MultiPoint) {
+                this.show(owner.findClosest(e.coordinate));
             } else {
                 this.show(e.coordinate);
             }

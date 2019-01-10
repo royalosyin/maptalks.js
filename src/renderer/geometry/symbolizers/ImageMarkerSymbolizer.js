@@ -25,7 +25,7 @@ export default class ImageMarkerSymbolizer extends PointSymbolizer {
 
     symbolize(ctx, resources) {
         const style = this.style;
-        if (style['markerWidth'] === 0 || style['markerHeight'] === 0 || style['markerOpacity'] === 0) {
+        if (!this.painter.isHitTesting() && (style['markerWidth'] === 0 || style['markerHeight'] === 0 || style['markerOpacity'] === 0)) {
             return;
         }
         const cookedPoints = this._getRenderContainerPoints();
@@ -110,12 +110,15 @@ export default class ImageMarkerSymbolizer extends PointSymbolizer {
     }
 
     getFixedExtent(resources) {
-        const url = this.style['markerFile'],
+        const style = this.style;
+        const url = style['markerFile'],
             img = resources ? resources.getImage(url) : null;
-        const width = this.style['markerWidth'] || (img ? img.width : 0),
-            height = this.style['markerHeight'] || (img ? img.height : 0);
+        const width = style['markerWidth'] || (img ? img.width : 0),
+            height = style['markerHeight'] || (img ? img.height : 0);
         const dxdy = this.getDxDy();
-        let result = new PointExtent(dxdy.add(-width / 2, 0), dxdy.add(width / 2, -height));
+        const alignPoint = getAlignPoint(new Size(width, height), style['markerHorizontalAlignment'], style['markerVerticalAlignment']);
+        let result = new PointExtent(dxdy.add(0, 0), dxdy.add(width, height));
+        result._add(alignPoint);
         const rotation = this.getRotation();
         if (rotation) {
             result = this._rotateExtent(result, rotation);

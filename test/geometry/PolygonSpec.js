@@ -7,7 +7,10 @@ describe('Geometry.Polygon', function () {
     var canvasContainer;
 
     beforeEach(function () {
-        var setups = COMMON_CREATE_MAP(center);
+        var setups = COMMON_CREATE_MAP(center, null, {
+            width : 800,
+            height : 600
+        });
         container = setups.container;
         map = setups.map;
         layer = new maptalks.VectorLayer('id');
@@ -243,7 +246,9 @@ describe('Geometry.Polygon', function () {
             new maptalks.Coordinate([center.x + 0.002, center.y])
         ]], {
             symbol: {
-                'lineWidth': 6
+                'lineWidth': 6,
+                'polygonOpacity' : 0,
+                'lineOpacity' : 0
             }
         });
         layer.addGeometry(geometry);

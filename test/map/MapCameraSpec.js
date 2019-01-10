@@ -52,7 +52,7 @@ describe('Map.Camera', function () {
                 return;
             }
             var baseLayer = new maptalks.TileLayer('b', {
-                urlTemplate : '/resources/tile.png'
+                urlTemplate : TILE_IMAGE
             });
             map.addLayer(baseLayer);
             map.setBearing(60);
@@ -67,9 +67,8 @@ describe('Map.Camera', function () {
         });
 
         it('render with canvas renderer', function (done) {
-            this.timeout(10000);
             var baseLayer = new maptalks.TileLayer('b', {
-                urlTemplate : '/resources/tile.png',
+                urlTemplate : TILE_IMAGE,
                 renderer : 'canvas'
             });
             map.addLayer(baseLayer);

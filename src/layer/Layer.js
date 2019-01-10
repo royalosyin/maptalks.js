@@ -60,9 +60,7 @@ class Layer extends JSONAble(Eventable(Renderable(Class))) {
             delete options.canvas;
         }
         super(options);
-        if (canvas) {
-            this._canvas = canvas;
-        }
+        this._canvas = canvas;
         this.setId(id);
         if (options) {
             this.setZIndex(options.zIndex);
@@ -85,6 +83,7 @@ class Layer extends JSONAble(Eventable(Renderable(Class))) {
                     this._renderer.render();
                 }
             }
+            this.onLoadEnd();
         }
         return this;
     }
@@ -143,6 +142,11 @@ class Layer extends JSONAble(Eventable(Renderable(Class))) {
      */
     setZIndex(zIndex) {
         this._zIndex = zIndex;
+        if (isNil(zIndex)) {
+            delete this.options['zIndex'];
+        } else {
+            this.options.zIndex = zIndex;
+        }
         if (this.map) {
             this.map._sortLayersByZIndex();
         }
@@ -158,6 +162,26 @@ class Layer extends JSONAble(Eventable(Renderable(Class))) {
      */
     getZIndex() {
         return this._zIndex || 0;
+    }
+
+    /**
+     * Get Layer's minZoom to display
+     * @return {Number}
+     */
+    getMinZoom() {
+        const map = this.getMap();
+        const minZoom = this.options['minZoom'];
+        return map ? Math.max(map.getMinZoom(), minZoom || 0) : minZoom;
+    }
+
+    /**
+     * Get Layer's maxZoom to display
+     * @return {Number}
+     */
+    getMaxZoom() {
+        const map = this.getMap();
+        const maxZoom = this.options['maxZoom'];
+        return map ? Math.min(map.getMaxZoom(), isNil(maxZoom) ? Infinity : maxZoom) : maxZoom;
     }
 
     /**
@@ -343,8 +367,8 @@ class Layer extends JSONAble(Eventable(Renderable(Class))) {
      * @returns {Layer} this
      */
     setMask(mask) {
-        if (!((mask.type === 'Point' && mask._isVectorMarker()) || mask.type === 'Polygon')) {
-            throw new Error('Mask for a layer must be a marker with vector marker symbol, a Polygon or a MultiPolygon.');
+        if (!((mask.type === 'Point' && mask._isVectorMarker()) || mask.type === 'Polygon' || mask.type === 'MultiPolygon')) {
+            throw new Error('Mask for a layer must be a marker with vector marker symbol or a Polygon(MultiPolygon).');
         }
 
         if (mask.type === 'Point') {
@@ -395,6 +419,9 @@ class Layer extends JSONAble(Eventable(Renderable(Class))) {
         return true;
     }
 
+    onLoadEnd() {
+    }
+
     /**
      * Whether the layer is loaded
      * @return {Boolean}
@@ -408,13 +435,17 @@ class Layer extends JSONAble(Eventable(Renderable(Class))) {
     }
 
     onConfig(conf) {
-        if (isNumber(conf['opacity'])) {
+        if (isNumber(conf['opacity']) || conf['cssFilter']) {
             const renderer = this.getRenderer();
             if (renderer) {
                 renderer.setToRedraw();
             }
         }
     }
+
+    onAdd() {}
+
+    onRemove() {}
 
     _bindMap(map, zIndex) {
         if (!map) {
@@ -426,9 +457,7 @@ class Layer extends JSONAble(Eventable(Renderable(Class))) {
         }
         this._switchEvents('on', this);
 
-        if (this.onAdd) {
-            this.onAdd();
-        }
+        this.onAdd();
 
         this.fire('add');
     }
@@ -446,9 +475,20 @@ class Layer extends JSONAble(Eventable(Renderable(Class))) {
         this._renderer.layer = this;
         this._renderer.setZIndex(this.getZIndex());
         this._switchEvents('on', this._renderer);
+        // some plugin of dom renderer doesn't implement onAdd
         if (this._renderer.onAdd) {
             this._renderer.onAdd();
         }
+
+        /**
+         * renderercreate event, fired when renderer is created.
+         *
+         * @event Layer#renderercreate
+         * @type {Object}
+         * @property {String} type - renderercreate
+         * @property {Layer} target    - the layer fires the event
+         * @property {Any} renderer    - renderer of the layer
+         */
         this.fire('renderercreate', {
             'renderer': this._renderer
         });
@@ -456,16 +496,14 @@ class Layer extends JSONAble(Eventable(Renderable(Class))) {
 
     _doRemove() {
         this._loaded = false;
-        if (this.onRemove) {
-            this.onRemove();
-        }
+        this.onRemove();
+
         this._switchEvents('off', this);
         if (this._renderer) {
             this._switchEvents('off', this._renderer);
             this._renderer.remove();
             delete this._renderer;
         }
-        delete this._mask;
         delete this.map;
     }
 

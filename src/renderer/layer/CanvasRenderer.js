@@ -1,4 +1,4 @@
-import { now, isNil, isArrayHasData, isSVG, IS_NODE, loadImage } from '../../core/util';
+import { now, isNil, isArrayHasData, isSVG, IS_NODE, loadImage, hasOwn } from '../../core/util';
 import Class from '../../core/Class';
 import Browser from '../../core/Browser';
 import Promise from '../../core/Promise';
@@ -31,7 +31,7 @@ class CanvasRenderer extends Class {
      * Render the layer.
      * Call checkResources
      */
-    render() {
+    render(framestamp) {
         this.prepareRender();
         if (!this.getMap() || !this.layer.isVisible()) {
             return;
@@ -61,10 +61,10 @@ class CanvasRenderer extends Class {
                     }
                 });
             } else {
-                this._tryToDraw(this);
+                this._tryToDraw(framestamp);
             }
         } else {
-            this._tryToDraw(this);
+            this._tryToDraw(framestamp);
         }
     }
 
@@ -98,19 +98,30 @@ class CanvasRenderer extends Class {
      */
 
     /**
-     * Ask whether the layer renderer needs to redraw
-     * @return {Boolean}
+     * @private
      */
-    needToRedraw() {
+    testIfNeedRedraw() {
+        const map = this.getMap();
         if (this._loadingResource) {
             return false;
         }
         if (this._toRedraw) {
             return true;
         }
-        if (!this.drawOnInteracting) {
+        if (map.isInteracting() && !this.drawOnInteracting) {
             return false;
         }
+        if (this.needToRedraw()) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Ask whether the layer renderer needs to redraw
+     * @return {Boolean}
+     */
+    needToRedraw() {
         const map = this.getMap();
         if (map.isInteracting()) {
             // don't redraw when map is moving without any pitch
@@ -168,17 +179,18 @@ class CanvasRenderer extends Class {
     remove() {
         this.onRemove();
         delete this._loadingResource;
-        delete this._southWest;
+        delete this.southWest;
         delete this.canvas;
         delete this.context;
+        delete this.canvasExtent2D;
         delete this._extent2D;
         delete this.resources;
         delete this.layer;
     }
 
-    onRemove() {
+    onRemove() {}
 
-    }
+    onAdd() {}
 
     /**
      * Get map
@@ -208,7 +220,7 @@ class CanvasRenderer extends Class {
             return null;
         }
         // size = this._extent2D.getSize(),
-        const containerPoint = map._pointToContainerPoint(this._southWest)._add(0, -map.height);
+        const containerPoint = map._pointToContainerPoint(this.southWest)._add(0, -map.height);
         return {
             'image': this.canvas,
             'layer': this.layer,
@@ -268,12 +280,13 @@ class CanvasRenderer extends Class {
             return false;
         }
         const map = this.getMap();
+        const r = Browser.retina ? 2 : 1;
         const size = map.getSize();
-        if (point.x < 0 || point.x > size['width'] || point.y < 0 || point.y > size['height']) {
+        if (point.x < 0 || point.x > size['width'] * r || point.y < 0 || point.y > size['height'] * r) {
             return false;
         }
         try {
-            const imgData = this.context.getImageData(point.x, point.y, 1, 1).data;
+            const imgData = this.context.getImageData(r * point.x, r * point.y, 1, 1).data;
             if (imgData[3] > 0) {
                 return true;
             }
@@ -326,16 +339,16 @@ class CanvasRenderer extends Class {
 
     /**
      * Prepare rendering
-     * Set necessary properties, like this._renderZoom/ this._extent2D, this._southWest
+     * Set necessary properties, like this._renderZoom/ this.canvasExtent2D, this.southWest
      * @private
      */
     prepareRender() {
         delete this._renderComplete;
         const map = this.getMap();
         this._renderZoom = map.getZoom();
-        this._extent2D = map._get2DExtent();
+        this.canvasExtent2D = this._extent2D = map._get2DExtent();
         //change from northWest to southWest, because northwest's point <=> containerPoint changes when pitch >= 72
-        this._southWest = map._containerPointToPoint(new Point(0, map.height));
+        this.southWest = map._containerPointToPoint(new Point(0, map.height));
     }
 
     /**
@@ -377,6 +390,9 @@ class CanvasRenderer extends Class {
             return;
         }
         this.context = this.canvas.getContext('2d');
+        if (!this.context) {
+            return;
+        }
         if (this.layer.options['globalCompositeOperation']) {
             this.context.globalCompositeOperation = this.layer.options['globalCompositeOperation'];
         }
@@ -477,7 +493,6 @@ class CanvasRenderer extends Class {
             });
             return maskExtent2D;
         }
-        this._shouldClip = true;
         /**
          * renderstart event, fired when layer starts to render.
          *
@@ -496,27 +511,38 @@ class CanvasRenderer extends Class {
 
     clipCanvas(context) {
         const mask = this.layer.getMask();
-        if (!mask && !this._shouldClip) {
+        if (!mask) {
             return false;
         }
-        const old = this._southWest;
+        const old = this.southWest;
         const map = this.getMap();
         //when clipping, layer's southwest needs to be reset for mask's containerPoint conversion
-        this._southWest = map._containerPointToPoint(new Point(0, map.height));
+        this.southWest = map._containerPointToPoint(new Point(0, map.height));
         context.save();
         if (Browser.retina) {
             context.save();
             context.scale(2, 2);
         }
-        mask._getPainter().paint(null, context);
+        // Handle MultiPolygon
+        if (mask.getGeometries) {
+            context.isMultiClip = true;
+            const masks = mask.getGeometries() || [];
+            context.beginPath();
+            masks.forEach(_mask => {
+                const painter =  _mask._getPainter();
+                painter.paint(null, context);
+            });
+            context.stroke();
+            delete context.isMultiClip;
+        } else {
+            const painter = mask._getPainter();
+            painter.paint(null, context);
+        }
         if (Browser.retina) {
             context.restore();
         }
         context.clip();
-        this._southWest = old;
-        if (this.isRenderComplete()) {
-            this._shouldClip = false;
-        }
+        this.southWest = old;
         return true;
     }
 
@@ -529,7 +555,7 @@ class CanvasRenderer extends Class {
             'extent' : this._extent2D,
             'maskExtent' : this._maskExtent,
             'zoom' : this._renderZoom,
-            'southWest' : this._southWest
+            'southWest' : this.southWest
         };
     }
 
@@ -663,29 +689,29 @@ class CanvasRenderer extends Class {
         return this._drawTime;
     }
 
-    _tryToDraw() {
+    _tryToDraw(framestamp) {
         this._toRedraw = false;
         if (!this.canvas && this.layer.isEmpty && this.layer.isEmpty()) {
             this._renderComplete = true;
             // not to create canvas when layer is empty
             return;
         }
-        this._drawAndRecord();
+        this._drawAndRecord(framestamp);
     }
 
-    _drawAndRecord() {
+    _drawAndRecord(framestamp) {
         if (!this.getMap()) {
             return;
         }
         const painted = this._painted;
         this._painted = true;
         let t = now();
-        this.draw();
+        this.draw(framestamp);
         t = now() - t;
         //reduce some time in the first draw
         this._drawTime = painted ? t  : t / 2;
         if (painted && this.layer.options['logDrawTime']) {
-            console.log('drawTime:', this.layer.getId(), this._drawTime);
+            console.log(this.layer.getId(), 'frameTimeStamp:', framestamp, 'drawTime:', this._drawTime);
         }
     }
 
@@ -698,7 +724,7 @@ class CanvasRenderer extends Class {
                 return;
             }
             const img = new Image();
-            if (crossOrigin) {
+            if (!isNil(crossOrigin)) {
                 img['crossOrigin'] = crossOrigin;
             }
             if (isSVG(url[0]) && !IS_NODE) {
@@ -804,6 +830,18 @@ export class ResourceCache {
         for (const p in res.resources) {
             const img = res.resources[p];
             this.addResource([p, img.width, img.height], img.image);
+        }
+        return this;
+    }
+
+    forEach(fn) {
+        if (!this.resources) {
+            return this;
+        }
+        for (const p in this.resources) {
+            if (hasOwn(this.resources, p)) {
+                fn(p, this.resources[p]);
+            }
         }
         return this;
     }
